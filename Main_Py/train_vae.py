@@ -248,6 +248,11 @@ class VAETrainer:
     
     def validate(self):
         """Validate the model"""
+        # Skip validation if no validation files
+        if not self.valid_files or len(self.valid_files) == 0:
+            print(f"Epoch {self.epoch}: No validation data, skipping validation")
+            return 0.0
+        
         self.encoder.eval()
         self.decoder.eval()
         
@@ -342,6 +347,10 @@ class VAETrainer:
         img_size = self.opt.img_size
         num_vps = self.opt.num_vps
         
+        if num_samples == 0:
+            print("Warning: No validation samples processed")
+            return 0.0
+        
         valid_loss /= (num_samples * img_size * img_size * num_vps)
         valid_kld /= num_samples
         valid_depth /= (num_samples * img_size * img_size * num_vps)
@@ -386,8 +395,8 @@ class VAETrainer:
             # Validate
             valid_loss = self.validate()
             
-            # Save model periodically
-            if self.epoch >= 18 and self.epoch % 2 == 0:
+            # Save model periodically (save final epoch and every 2 epochs after 18)
+            if self.epoch == self.opt.max_epochs or (self.epoch >= 18 and self.epoch % 2 == 0):
                 self.save_model()
             
             # Update learning rate

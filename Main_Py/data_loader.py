@@ -280,8 +280,77 @@ class DataLoader:
         self._save_processed_data(viewpoints_data, labels, object_categories, data_folder_path)
     
     def _save_processed_data(self, viewpoints_data, labels, categories, storage_path):
-        """Save processed tensors to disk"""
-        # Implementation would continue here with saving logic
-        # This is a placeholder for the full implementation
+        """Save processed tensors to disk.
+
+        Expects:
+            viewpoints_data: list over splits [split][model][vp] -> filepath
+            labels: list over splits [split][model] -> int label (1-indexed)
+            categories: list of class names (strings)
+            storage_path: root data folder (e.g., Data/benchmark or Data/nonbenchmark)
+
+        Saves for each split a single .data file with keys:
+            'dataset': FloatTensor [N, num_vps, H, W]
+            'labels': LongTensor [N]
+            'category': list[str]
+        into: <storage_path>/Datasets/<split>/data_0.data
+        """
         print("Saving processed data...")
-        pass
+        import torchvision.transforms as T
+        import torch.nn.functional as F
+
+        splits_names = ["train", "validation", "test"]
+
+        # Create destination directories
+        datasets_root = os.path.join(storage_path, "Datasets")
+        os.makedirs(datasets_root, exist_ok=True)
+        for split_name in splits_names[: len(viewpoints_data)]:
+            os.makedirs(os.path.join(datasets_root, split_name), exist_ok=True)
+
+        # Helper: load one depth map as tensor [1, H, W] and resize to img_size
+        def load_depth(path):
+            if self.file_extension == ".png":
+                img = Image.open(path).convert("L")
+                resize = T.Resize((self.opt.img_size, self.opt.img_size), interpolation=Image.BILINEAR)
+                tensor = T.ToTensor()(resize(img))  # [1, H, W] in [0,1]
+                return tensor
+            else:  # .txt float grid
+                t = self.load_txt_into_tensor(path)  # [1, h, w]
+                # Resize with bilinear to (img_size, img_size)
+                t = F.interpolate(t.unsqueeze(0), size=(self.opt.img_size, self.opt.img_size), mode="bilinear", align_corners=False).squeeze(0)
+                return t
+
+        for split_idx, split_models in enumerate(viewpoints_data):
+            split_name = splits_names[split_idx]
+            split_labels = labels[split_idx]
+
+            if len(split_models) == 0:
+                # Nothing to save for this split
+                continue
+
+            num_models = len(split_models)
+            num_vps = len(split_models[0])  # number of viewpoints per model
+
+            # Allocate tensor [N, V, H, W]
+            dataset = torch.zeros(
+                (num_models, num_vps, self.opt.img_size, self.opt.img_size), dtype=torch.float32
+            )
+            label_tensor = torch.zeros((num_models,), dtype=torch.long)
+
+            for m_idx, vp_paths in enumerate(split_models):
+                # vp_paths: list of file paths for each viewpoint for this model
+                for v_idx, fp in enumerate(vp_paths):
+                    dataset[m_idx, v_idx] = load_depth(fp)
+                label_tensor[m_idx] = int(split_labels[m_idx])  # keep 1-indexed as upstream code expects
+
+            save_dict = {
+                "dataset": dataset,
+                "labels": label_tensor,
+                "category": categories,
+            }
+
+            out_dir = os.path.join(datasets_root, split_name)
+            out_path = os.path.join(out_dir, "data_0.data")
+            torch.save(save_dict, out_path)
+            print(f"Saved {split_name}: {num_models} samples, {num_vps} vps -> {out_path}")
+
+  

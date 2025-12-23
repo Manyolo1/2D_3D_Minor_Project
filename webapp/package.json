@@ -1,0 +1,20 @@
+{
+    "name": "single-image-3d-webapp",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "dev": "nodemon server.js",
+        "start": "node server.js",
+        "client": "cd client && npm run dev",
+        "client:build": "cd client && npm run build"
+    },
+    "dependencies": {
+        "cors": "^2.8.5",
+        "express": "^4.19.2",
+        "multer": "^1.4.5-lts.1",
+        "uuid": "^9.0.1"
+    },
+    "devDependencies": {
+        "nodemon": "^3.1.0"
+    }
+}
